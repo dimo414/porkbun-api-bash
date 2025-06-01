@@ -37,24 +37,24 @@ main() {
                 opt_vars+=(SILENT=true)
                 ;;
             v)
-                [ "${OPTARG: -1}" = '-' ] && usage "Missing required argument for '-v'"
+                [[ "${OPTARG: -1}" == '-' ]] && usage "Missing required argument for '-v'"
                 opt_vars+=(VERBOSITY="$OPTARG")
                 ;;
             d)
-                [ "${OPTARG: -1}" = '-' ] && usage "Missing required argument for '-d'"
+                [[ "${OPTARG: -1}" == '-' ]] && usage "Missing required argument for '-d'"
                 opt_vars+=(DOMAIN="$OPTARG")
                 ;;
             c)
-                [ "${OPTARG: -1}" = '-' ] && usage "Missing required argument for '-c'"
+                [[ "${OPTARG: -1}" == '-' ]] && usage "Missing required argument for '-c'"
                 CONFIGFILE="$OPTARG"
                 ;;
             4)
-                [ "$IP_VERSION_FLAG" ] && usage "Flags '-4' and '-6' are mutually exclusive"
+                [[ -n "$IP_VERSION_FLAG" ]] && usage "Flags '-4' and '-6' are mutually exclusive"
                 IP_VERSION_FLAG=true
                 opt_vars+=(IP_VERSION='-4')
                 ;;
             6)
-                [ "$IP_VERSION_FLAG" ] && usage "Flags '-4' and '-6' are mutually exclusive"
+                [[ -n "$IP_VERSION_FLAG" ]] && usage "Flags '-4' and '-6' are mutually exclusive"
                 IP_VERSION_FLAG=true
                 opt_vars+=(IP_VERSION='-6')
                 ;;
@@ -72,7 +72,7 @@ main() {
     vars_formatting
 
     # Execute specified function
-    [ $# -eq 0 ] && usage "No command specified"
+    (( $# == 0 )) && usage "No command specified"
     case $1 in
         update-dns)
             vars_set DOMAIN A_RECORD_NUM
@@ -86,16 +86,16 @@ main() {
             log 6 "Making 'ping' API call"
             api_call 'ping'
             echo "API Response:"
-            echo "$api_response" | jq .
+            jq . <<<"$api_response"
             SILENT=true
             log_exit "Ping API call successful; API Response: $api_response" 5
             ;;
         custom)
             local endpoint_end api_data
-            if [ -z "$2" ]; then
+            if [[ -z "$2" ]]; then
                 read -r -p 'Enter API endpoint: https://api.porkbun.com/api/json/v3/' endpoint_end
                 api_data=()
-                while read -r -p "Optionally, enter additional JSON data to send with the API call in the form 'key=value': " && [ -n "$REPLY" ]; do
+                while read -r -p "Optionally, enter additional JSON data to send with the API call in the form 'key=value': " && [[ -n "$REPLY" ]]; do
                     api_data+=("$REPLY")
                 done
             else
@@ -105,7 +105,7 @@ main() {
             fi
             log 6 "Making custom API call to endpoint '$endpoint_end' with data: ${api_data[*]}"
             api_call "$endpoint_end" "${api_data[@]}"
-            echo "$api_response" | jq .
+            jq . <<<"$api_response"
             SILENT=true
             log_exit "Custom API call to endpoint '$endpoint_end' with data '${api_data[*]}' successful; API Response: $api_response" 4
             ;;
@@ -118,11 +118,11 @@ main() {
 # Source config file from user's home directory
 # If variable 'CONFIGFILE' is set (typically from flag '-c'), sources that config file instead
 source_config() {
-    if [ -z "$CONFIGFILE" ]; then
+    if [[ -z "$CONFIGFILE" ]]; then
         CONFIGFILE="$HOME/.porkbun-apirc"
     fi
-    if [ -f "$CONFIGFILE" ]; then
-        if [ -r "$CONFIGFILE" ]; then
+    if [[ -f "$CONFIGFILE" ]]; then
+        if [[ -r "$CONFIGFILE" ]]; then
             # shellcheck disable=SC2064
             trap "echo \"Encountered an error while sourcing config file '$CONFIGFILE'\" >&2; exit 1" ERR
             # shellcheck source=.porkbun-apirc
@@ -139,7 +139,7 @@ source_config() {
 }
 
 usage() {  # Args: [error message]
-    [ -n "$1" ] && echo "Error: $1" 1>&2
+    [[ -n "$1" ]] && echo "Error: $1" 1>&2
     echo "$usage_message" 1>&2
     exit 1
 }
@@ -148,7 +148,7 @@ usage() {  # Args: [error message]
 # Endpoint argument should include everything after 'api.porkbun.com/api/json/v3/' in the endpoint's URI
 # All additional arguments are interpreted as 'key=value' pairs to add to JSON data sent in API call
 api_call() {  # Args: <endpoint> [key=value [...]]
-    [ -z "$1" ] && log_exit 'No endpoint specified for API call'
+    [[ -z "$1" ]] && log_exit 'No endpoint specified for API call'
     local endpoint curl_data response curl_exit_code http_status api_status
     endpoint="https://api.porkbun.com/api/json/v3/$1"
     shift
@@ -171,15 +171,15 @@ api_call() {  # Args: <endpoint> [key=value [...]]
     --data "$curl_data" \
     "$endpoint")
     curl_exit_code=$?
-    http_status=$(echo "$response" | tail -1)
-    api_response=$(echo "$response" | sed '$d')
-    api_status=$(jq -r .status 2>/dev/null <<< "$api_response")
-    if [ $curl_exit_code -ne 0 ] || [ "$api_status" != 'SUCCESS' ]; then
+    http_status=$(tail -1 <<<"$response")
+    api_response=$(sed '$d' <<<"$response")
+    api_status=$(jq -r .status 2>/dev/null <<<"$api_response")
+    if (( curl_exit_code != 0 )) || [[ "$api_status" != 'SUCCESS' ]]; then
         local exit_string="API Call failed\nHTTP Status Code: $http_status\nAPI Endpoint: $endpoint"
-        if [ -n "$1" ]; then
+        if [[ -n "$1" ]]; then
             exit_string+="\nData sent to API: $*"
         fi
-        if [ "$api_status"  = 'ERROR' ]; then
+        if [[ "$api_status" == 'ERROR' ]]; then
             exit_string+="\nAPI Response: $api_response"
         fi
         log_exit "$exit_string"
@@ -197,7 +197,7 @@ json_to_assoc_array() {  # Args: <json string>
 
 update_dns() {
     log 6 "Updating DNS A record for domain $DOMAIN"
-    [ "$IP_VERSION" = '-6' ] && log 3 "IPv4 required to get current IP from ping call, overriding IP_VERSION of '-6' to '-4'"
+    [[ "$IP_VERSION" = '-6' ]] && log 3 "IPv4 required to get current IP from ping call, overriding IP_VERSION of '-6' to '-4'"
     IP_VERSION='-4'
     log 7 'Getting current public IPv4 address'
     api_call 'ping'
@@ -210,7 +210,7 @@ update_dns() {
     check_exitcode 'Failed to find current A Record in API response'
     read -r -d ' ' ArecordIP ArecordID ArecordTTL <<< "$Arecord"
     log 7 "Current A record for domain $DOMAIN: $ArecordIP"
-    if [ "$currentIP" = "$ArecordIP" ]; then
+    if [[ "$currentIP" == "$ArecordIP" ]]; then
         log_exit "A Record IP for $DOMAIN already matches public IP of $currentIP" 5
     else
         log 7 "Updating A record for $DOMAIN to current IPv4 address of $currentIP"
@@ -229,7 +229,7 @@ retrieve_ssl() {
       SSL_FOLDER="${SSL_FOLDER}/${DOMAIN}"
     fi
     log 6 "Retrieving SSL cert bundle for domain ${DOMAIN} & saving to ${SSL_FOLDER}"
-    if [ ! -d "$SSL_FOLDER" ]; then
+    if [[ ! -d "$SSL_FOLDER" ]]; then
         log 4 "Creating SSL cert output folder '$SSL_FOLDER'"
         mkdir -p "$SSL_FOLDER"
         check_exitcode "Failed to create SSL cert output folder '$SSL_FOLDER'"
@@ -237,19 +237,19 @@ retrieve_ssl() {
     api_call "ssl/retrieve/$DOMAIN"
     json_to_assoc_array "$api_response"  # Convert to associative array to iterate on SSL cert formats
     local cert_to_check file_name_var file_name cert_file
-    if [ "$CHECK_CURRENT_CERT" = true ]; then
+    if [[ "$CHECK_CURRENT_CERT" == true ]]; then
         cert_to_check='certificatechain'
         file_name_var="${cert_to_check}_name"
         file_name="${!file_name_var:-$cert_to_check}"
         cert_file="$SSL_FOLDER/$DOMAIN.$file_name.pem"
-        if [ -f "$cert_file" ]; then
+        if [[ -f "$cert_file" ]]; then
             log 7 "Checking if SSL certs are already up to date"
             cmp -s "$cert_file" <<< "${json_array[$cert_to_check]}" || log_exit "SSL certs for domain $DOMAIN already up to date" 5
         fi
     fi
     log 7 'Writing SSL cert PEM files'
     for key in "${!json_array[@]}"; do
-        [ "$key" = 'status' ] && continue
+        [[ "$key" == 'status' ]] && continue
         file_name_var="${key}_name"
         file_name="${!file_name_var:-$key}"
         echo -ne "${json_array[$key]}" > "$SSL_FOLDER/$DOMAIN.$file_name.pem"
@@ -263,31 +263,31 @@ retrieve_ssl() {
 # Logging functions
 log() {  # Args: <severity level> <log message>
     local logstring
-    if [ "$VERBOSITY" -lt "$1" ]; then
+    if (( VERBOSITY < $1 )); then
         return 0
     fi
     logstring="$(date '+%Y-%d-%m %H:%M:%S') - $2"
-    [ "$1" -le 5 ] && logstring+='\n'
-    if ! [ "$SILENT" = true ] || [ "$1" -eq 0 ]; then
-        if [ "$1" -eq 0 ]; then
+    (( $1 < 5 )) && logstring+='\n'
+    if [[ "$SILENT" != true ]] || (( $1 == 0 )); then
+        if (( $1 == 0 )); then
             echo -e "$2" 1>&2
         else
             echo -e "$2"
         fi
     fi
-    if [ -n "$LOGFILE" ]; then
+    if [[ -n "$LOGFILE" ]]; then
         echo -e "$logstring" >> "$LOGFILE"
     fi
 }
 
 log_exit() {  # Args: <log message> [severity level] [exit code]
-    if [ -z "$2" ]; then
+    if [[ -z "$2" ]]; then
         severity_level=0
     else
         severity_level="$2"
     fi
-    if [ -z "$3" ]; then
-        if [ "$severity_level" -eq 0 ]; then
+    if [[ -z "$3" ]]; then
+        if (( severity_level == 0 )); then
             exit_code=1
         else
             exit_code=0
@@ -300,7 +300,7 @@ log_exit() {  # Args: <log message> [severity level] [exit code]
 }
 
 check_exitcode() {  # Args: <log message>
-    if [ $? -ne 0 ]; then
+    if (( $? != 0 )); then
         log_exit "$1"
     fi
 }
@@ -308,7 +308,7 @@ check_exitcode() {  # Args: <log message>
 # Check supplied variables are set, variables names should be passed as strings without '$'
 vars_set() {  # Args: [var1] [var2] [var3] ...
     for i in "$@"; do
-        if [ -z "${!i}" ]; then
+        if [[ -z "${!i}" ]]; then
             log_exit "Required variable '$i' is unset"
         fi
     done
@@ -317,11 +317,11 @@ vars_set() {  # Args: [var1] [var2] [var3] ...
 # Check for correct variable formatting
 vars_formatting() {
     SSL_FOLDER=${SSL_FOLDER%/}
-    [ ${#IP_VERSION} -eq 1 ] && IP_VERSION="-$IP_VERSION"
-    [ -n "$DOMAIN" ] && grep -vFq '.' <<< "$DOMAIN" && echo "Invalid value for DOMAIN: '$DOMAIN'" 1>&2 && exit 1
-    ! [ "$VERBOSITY" -ge 0 ] && [ "$VERBOSITY" -le 7 ] 2>/dev/null && echo 'VERBOSITY must be set to a value between 0 and 7' 1>&2 && exit 1
-    ! [ "$A_RECORD_NUM" -ge 0 ] && [ "$A_RECORD_NUM" -le 10 ] 2>/dev/null && echo 'A_RECORD_NUM must be set to a value between 0 and 10' 1>&2 && exit 1
+    (( ${#IP_VERSION} == 1 )) && IP_VERSION="-$IP_VERSION"
+    [[ -n "$DOMAIN" ]] && grep -vFq '.' <<< "$DOMAIN" && echo "Invalid value for DOMAIN: '$DOMAIN'" 1>&2 && exit 1
+    (( VERBOSITY < 0 || VERBOSITY > 7 )) && echo 'VERBOSITY must be set to a value between 0 and 7' 1>&2 && exit 1
+    (( A_RECORD_NUM < 0 || A_RECORD_NUM > 10 )) && echo 'A_RECORD_NUM must be set to a value between 0 and 10' 1>&2 && exit 1
 }
 
 # Run main function if this script wasn't sourced in another script.
-[ "${BASH_SOURCE[0]}" = "$0" ] && main "$@"
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && main "$@"
