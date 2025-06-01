@@ -9,8 +9,6 @@ LOGFILE="/tmp/porkbun-api-$USER.log"
 SILENT=false
 A_RECORD_NUM=0
 CHECK_CURRENT_CERT=true
-certificatechain_name=fullchain
-intermediatecertificate_name=intermediate
 
 usage_message="\
 Usage: $0 [-hs46] [-c /path/to/config] [-v <verbosity>] [-d <domain>] <command> [args]
@@ -65,7 +63,7 @@ main() {
                 ;;
         esac
     done
-    shift $(($OPTIND - 1))
+    shift $(( OPTIND - 1 ))
     source_config
     declare -p opt_vars >/dev/null 2>&1 && declare "${opt_vars[@]}"  # Set variables from flags, overwriting config file variables
 
@@ -95,9 +93,9 @@ main() {
         custom)
             local endpoint_end api_data
             if [ -z "$2" ]; then
-                read -p 'Enter API endpoint: https://api.porkbun.com/api/json/v3/' endpoint_end
+                read -r -p 'Enter API endpoint: https://api.porkbun.com/api/json/v3/' endpoint_end
                 api_data=()
-                while read -p "Optionally, enter additional JSON data to send with the API call in the form 'key=value': " && [ -n "$REPLY" ]; do
+                while read -r -p "Optionally, enter additional JSON data to send with the API call in the form 'key=value': " && [ -n "$REPLY" ]; do
                     api_data+=("$REPLY")
                 done
             else
@@ -109,7 +107,7 @@ main() {
             api_call "$endpoint_end" "${api_data[@]}"
             echo "$api_response" | jq .
             SILENT=true
-            log_exit "Custom API call to endpoint '$endpoint_end' with data '$api_data' successful; API Response: $api_response" 4
+            log_exit "Custom API call to endpoint '$endpoint_end' with data '${api_data[*]}' successful; API Response: $api_response" 4
             ;;
         *)
             usage "Unknown command: $1"
@@ -125,8 +123,10 @@ source_config() {
     fi
     if [ -f "$CONFIGFILE" ]; then
         if [ -r "$CONFIGFILE" ]; then
+            # shellcheck disable=SC2064
             trap "echo \"Encountered an error while sourcing config file '$CONFIGFILE'\" >&2; exit 1" ERR
-            . "$CONFIGFILE"
+            # shellcheck source=.porkbun-apirc
+            source "$CONFIGFILE"
             trap - ERR
         else
             echo "User '$USER' does not have permission to read config file '$CONFIGFILE'" >&2
@@ -155,12 +155,12 @@ api_call() {  # Args: <endpoint> [key=value [...]]
     curl_data="{\"apikey\":\"$APIKEY\",\"secretapikey\":\"$SECRETKEY\""
     for i in "$@"; do
         unset key value
-        IFS='=' read key value <<< "$i"
-        key="$(sed 's!"!\\"!g' <<< "$key")"
-        value="$(sed 's!"!\\"!g' <<< "$value")"
-        curl_data+=",\"$key\":\"$value\""
+        IFS='=' read -r key value <<< "$i"
+        # expansion \-escapes " characters
+        curl_data+=",\"${key//\"/\\\"}\":\"${value//\"/\\\"}\""
     done
     curl_data+='}'
+    # shellcheck disable=SC2086
     response=$(curl \
     --silent \
     --fail-with-body \
@@ -177,7 +177,7 @@ api_call() {  # Args: <endpoint> [key=value [...]]
     if [ $curl_exit_code -ne 0 ] || [ "$api_status" != 'SUCCESS' ]; then
         local exit_string="API Call failed\nHTTP Status Code: $http_status\nAPI Endpoint: $endpoint"
         if [ -n "$1" ]; then
-            exit_string+="\nData sent to API: $@"
+            exit_string+="\nData sent to API: $*"
         fi
         if [ "$api_status"  = 'ERROR' ]; then
             exit_string+="\nAPI Response: $api_response"
@@ -192,7 +192,7 @@ json_to_assoc_array() {  # Args: <json string>
     declare -gA json_array
     while IFS='=' read -r -d $'\t' key value; do
         json_array["$key"]="$value"
-    done <<< $(jq -r "to_entries|map(\"\(.key)=\(.value)\")|@tsv" <<< "$1")$'\t'
+    done <<< "$(jq -r "to_entries|map(\"\(.key)=\(.value)\")|@tsv" <<< "$1")"$'\t'
 }
 
 update_dns() {
@@ -208,7 +208,7 @@ update_dns() {
     api_call "dns/retrieveByNameType/$DOMAIN/A"
     Arecord=$(jq -re ".records[$A_RECORD_NUM] | .content,.id,.ttl" 2>/dev/null <<< "$api_response")
     check_exitcode 'Failed to find current A Record in API response'
-    read -d ' ' ArecordIP ArecordID ArecordTTL <<< "$Arecord"
+    read -r -d ' ' ArecordIP ArecordID ArecordTTL <<< "$Arecord"
     log 7 "Current A record for domain $DOMAIN: $ArecordIP"
     if [ "$currentIP" = "$ArecordIP" ]; then
         log_exit "A Record IP for $DOMAIN already matches public IP of $currentIP" 5
@@ -262,10 +262,11 @@ retrieve_ssl() {
 
 # Logging functions
 log() {  # Args: <severity level> <log message>
+    local logstring
     if [ "$VERBOSITY" -lt "$1" ]; then
         return 0
     fi
-    local logstring="$(date '+%Y-%d-%m %H:%M:%S') - $2"
+    logstring="$(date '+%Y-%d-%m %H:%M:%S') - $2"
     [ "$1" -le 5 ] && logstring+='\n'
     if ! [ "$SILENT" = true ] || [ "$1" -eq 0 ]; then
         if [ "$1" -eq 0 ]; then
@@ -318,8 +319,8 @@ vars_formatting() {
     SSL_FOLDER=${SSL_FOLDER%/}
     [ ${#IP_VERSION} -eq 1 ] && IP_VERSION="-$IP_VERSION"
     [ -n "$DOMAIN" ] && grep -vFq '.' <<< "$DOMAIN" && echo "Invalid value for DOMAIN: '$DOMAIN'" 1>&2 && exit 1
-    ! [ "$VERBOSITY" -ge 0 -a "$VERBOSITY" -le 7 ] 2>/dev/null && echo 'VERBOSITY must be set to a value between 0 and 7' 1>&2 && exit 1
-    ! [ "$A_RECORD_NUM" -ge 0 -a "$A_RECORD_NUM" -le 10 ] 2>/dev/null && echo 'A_RECORD_NUM must be set to a value between 0 and 10' 1>&2 && exit 1
+    ! [ "$VERBOSITY" -ge 0 ] && [ "$VERBOSITY" -le 7 ] 2>/dev/null && echo 'VERBOSITY must be set to a value between 0 and 7' 1>&2 && exit 1
+    ! [ "$A_RECORD_NUM" -ge 0 ] && [ "$A_RECORD_NUM" -le 10 ] 2>/dev/null && echo 'A_RECORD_NUM must be set to a value between 0 and 10' 1>&2 && exit 1
 }
 
 # Run main function if this script wasn't sourced in another script.

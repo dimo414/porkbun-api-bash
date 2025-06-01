@@ -15,10 +15,6 @@ SECRETKEY=  # Your Porkbun API Secret Key
 #SSL_FOLDER="/ssl"  # The folder to output SSL certs to for the 'retrieve-ssl' command.
 #USE_DOMAIN_SUBFOLDER=true  # If true write SSL cert to a subfolder with the domain name, e.g. /ssl/example.com.
 #CHECK_CURRENT_CERT=true  # Check if SSL cert is already up to date before writing retrieved certs. Setting this to 'false' will write to SSL cert files every run.
-#certificatechain_name=fullchain  # If set, replaces 'certificatechain' with this variable's value in the name of the cert file that gets written.
-#intermediatecertificate_name=intermediate  # If set, replaces 'intermediatecertificate' with this variable's value in the name of the cert file that gets written.
-#privatekey_name=  # If set, replaces 'privatekey' with this variable's value in the name of the cert file that gets written.
-#publickey_name=  # If set, replaces 'publickey' with this variable's value in the name of the cert file that gets written.
 
 # Logging variables; By default, any messages with a priority at or below VERBOSITY are output to both stdout and file LOGFILE.
 # Setting SILENT to 'true' disables output to stdout. Unsetting LOGFILE or setting it to an empty string disables output to a log file.
