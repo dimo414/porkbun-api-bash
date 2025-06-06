@@ -220,10 +220,6 @@ update_dns() {
 }
 
 retrieve_ssl() {
-    # Legacy behavior was to append a domain name folder only if SSL_FOLDER wasn't set
-    if [[ -n "$SSL_FOLDER" ]] && [[ -z "$USE_DOMAIN_SUBFOLDER" ]]; then
-      USE_DOMAIN_SUBFOLDER=false
-    fi
     SSL_FOLDER=${SSL_FOLDER:-/ssl}
     if [[ "${USE_DOMAIN_SUBFOLDER:-true}" == true ]]; then
       SSL_FOLDER="${SSL_FOLDER}/${DOMAIN}"
