@@ -222,7 +222,7 @@ update_dns() {
 retrieve_ssl() {
     SSL_FOLDER=${SSL_FOLDER:-/ssl}
     if [[ "${USE_DOMAIN_SUBFOLDER:-true}" == true ]]; then
-      SSL_FOLDER="${SSL_FOLDER}/${DOMAIN}"
+        SSL_FOLDER="${SSL_FOLDER}/${DOMAIN}"
     fi
     log 6 "Retrieving SSL cert bundle for domain ${DOMAIN} & saving to ${SSL_FOLDER}"
     if [ ! -d "$SSL_FOLDER" ]; then
